@@ -20,8 +20,13 @@ ifeq (icc,$(findstring icc,${CC}))
 else
   CFLAGS += -Wall -O2  -g -fPIC
 endif
+
+CC = mpicc
+CXX = mpicxx
+HDF5DIR = $(HDF5_HOME)
+CFLAGS += -I$(HDF5DIR)/include
 CXXFLAGS += $(CFLAGS)
-LDFLAGS +=-Wl,-rpath,${CURDIR} -L${CURDIR} -lrgad
+LDFLAGS +=-Wl,-rpath,${CURDIR} -L${CURDIR} -lrgad -L$(HDF5DIR)/lib -lhdf5_hl -lhdf5
 OPTS = 
 PG = 
 CFLAGS += $(OPTS)
@@ -63,6 +68,10 @@ test: PGIIhead btest
 	@diff PGIIhead_out.test PGIIhead_out.txt
 PGIIhead: PGIIhead.cpp librgad.so
 PosDump: PosDump.cpp librgad.so
+
+Convert2HDF5: Convert2HDF5.cpp librgad.so
+Downsample2HDF5: Downsample2HDF5.cpp librgad.so
+
 btest: btest.cpp librgad.so
 	$(CC) $(CFLAGS) $< -lboost_unit_test_framework ${LDFLAGS} -o $@
 

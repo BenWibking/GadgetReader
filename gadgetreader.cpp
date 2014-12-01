@@ -374,18 +374,23 @@ namespace GadgetReader{
   }
 
   /*Get total size of a block in the snapshot, in bytes*/
-  int64_t GSnap::GetBlockSize(std::string BlockName, int type)
+  int64_t GSnap::GetBlockSize(std::string BlockName, int type, int64_t stride)
   {
         int64_t size=0;
         //Find total number of particles needed
         for(unsigned int i=0; i<file_maps.size(); i++)
                 if(file_maps[i].blocks.count(BlockName)){
                         if(type >= 0 && type < N_TYPE)
-                                size+=file_maps[i].header.npart[type]*file_maps[i].blocks[BlockName].partlen;
+                                size+=file_maps[i].header.npart[type]/stride*file_maps[i].blocks[BlockName].partlen;
                         else
                                 size+=file_maps[i].blocks[BlockName].length;
                 }
         return size;
+  }
+
+  int64_t GSnap::GetBlockSize(std::string BlockName, int type)
+  {
+    return GetBlockSize(BlockName, type, 1);
   }
 
   /*Get a set of the block names in the snapshot*/
@@ -410,7 +415,7 @@ namespace GadgetReader{
    *        Only skip types for which the block is actually present:
    *        Unfortunately there is no way of the library knowing which particle has which type, so 
    *        there is no way of telling that in advance.  */
-  int64_t GSnap::GetBlock(std::string BlockName, void *block, int64_t npart_toread, int64_t start_part, int skip_type)
+  int64_t GSnap::GetBlock(std::string BlockName, void *block, int64_t npart_toread, int64_t start_part, int skip_type, int64_t stride)
   {
         int64_t npart_read=0;
         //Check the block really exists
@@ -471,7 +476,31 @@ namespace GadgetReader{
                 if(fseek(fd,start_pos,SEEK_SET) == -1)
                         WARN("Failed to seek\n");
                 //Read the data!
-                read_data=fread(((char *)block)+npart_read*cur_block.partlen,cur_block.partlen,npart_file,fd);
+
+		/* BDW: want to read strided data for subsamples, so only read every X particles */
+		if(stride==1) {
+		  read_data=fread(((char *)block)+npart_read*cur_block.partlen,cur_block.partlen,npart_file,fd);
+		} else {
+		  printf("doing strided read of %ld particles (%ld read)...\n",npart_toread,npart_read);
+		  int64_t npart_read_strided = 0;
+
+		  while(npart_read < npart_toread) {
+		    int64_t part_to_read = 1;
+
+		    read_data = fread(((char *)block)+npart_read_strided*cur_block.partlen,cur_block.partlen,part_to_read,fd);
+		    fseek(fd,(stride-part_to_read)*cur_block.partlen,SEEK_CUR);
+
+		    if(read_data!=part_to_read) {
+		      WARN("Read failed from file %d\n",i);
+		      break;
+		    }
+
+		    npart_read_strided += part_to_read;
+		    npart_read += stride;
+		  }
+
+		  read_data = npart_read_strided;
+		}
                 //Don't die if we read the wrong amount of data; maybe we can find it in the next file.
                 if(read_data !=npart_file)
                         WARN("Only read %u particles of %u from file %d\n",read_data,npart_file,i);
@@ -484,6 +513,11 @@ namespace GadgetReader{
                 WARN("Read %ld particles out of %ld\n",npart_read,npart_toread);
         }
         return npart_read;
+  }
+
+  int64_t GSnap::GetBlock(std::string BlockName, void *block, int64_t npart_toread, int64_t start_part, int skip_type)
+  {
+    return GetBlock(BlockName, block, npart_toread, start_part, skip_type, 1);
   }
 
   /* Return a header*/

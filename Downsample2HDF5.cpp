@@ -87,7 +87,7 @@ int main(int argc, char* argv[]){
         exit(1);
      }
 
-     int64_t stride = 1; /* increase this for downsampling */
+     int64_t stride = 100;
 
      /*Convert the header*/
      head=snap.GetHeader();
